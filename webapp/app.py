@@ -130,10 +130,9 @@ def create_mashup(job):
         ]
         
         # yt-dlp options with anti-bot protection
-        cookies_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookies.txt')
         opts = {
             'format': 'ba/b',
-            'cookiefile': cookies_path if os.path.exists(cookies_path) else None,
+            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
             'extractor_args': {'youtube': {'player_client': ['android', 'web_safari', 'web']}},
     
             # Anti-bot measures
