@@ -151,7 +151,7 @@
         
         .result {
             margin-top: 30px;
-            padding: 24px;
+            padding: 20px;
             border-radius: 20px;
             display: none;
             text-align: center;
@@ -285,44 +285,6 @@
             transform: translateY(-2px);
         }
         
-        .secondary-btn {
-            background: #f1f5f9;
-            color: #334155;
-            border: 1px solid #cbd5e1;
-            padding: 12px 28px;
-            border-radius: 60px;
-            font-weight: 600;
-            font-size: 0.95em;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-decoration: none;
-            display: inline-block;
-        }
-        
-        .secondary-btn:hover {
-            background: #e2e8f0;
-        }
-        
-        .download-btn {
-            background: #059669;
-            color: white;
-            border: none;
-            padding: 14px 32px;
-            border-radius: 60px;
-            font-weight: 600;
-            font-size: 1em;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-decoration: none;
-            display: inline-block;
-            box-shadow: 0 10px 15px -3px rgba(5, 150, 105, 0.2);
-        }
-        
-        .download-btn:hover {
-            background: #047857;
-            transform: translateY(-2px);
-        }
-        
         .footer-note {
             text-align: center;
             margin-top: 25px;
@@ -434,7 +396,6 @@
                 } else {
                     currentJobId = data.job_id;
                     
-                    // Show Job ID but as reference only
                     document.getElementById('progressSection').style.display = 'block';
                     document.getElementById('jobInfo').innerHTML = `
                         <div style="margin-bottom: 10px; color: #475569;">Request Submitted</div>
@@ -462,10 +423,8 @@
             fetch(`/status/${jobId}`)
                 .then(response => response.json())
                 .then(data => {
-                    // Update progress
                     document.getElementById('progressFill').style.width = data.progress + '%';
                     
-                    // Status badge
                     let statusClass = 'status-' + data.status;
                     let statusText = data.status.charAt(0).toUpperCase() + data.status.slice(1);
                     
@@ -490,7 +449,6 @@
                         document.getElementById('submitBtn').disabled = false;
                         document.getElementById('submitBtn').textContent = 'Create Mashup';
                     } else {
-                        // Check again after 2.5 seconds
                         setTimeout(() => checkStatus(jobId), 2500);
                     }
                 })
@@ -508,13 +466,9 @@
             result.className = 'result success';
             result.style.display = 'block';
             
-            // Show success message WITHOUT download button
+            // ✅ REMOVED duplicate green box - now only shows email confirmation
             result.innerHTML = `
-                <strong style="font-size: 1.2em;">✓ Completed Successfully</strong>
-                <p style="margin: 15px 0; color: #065f46;">${data.message}</p>
-                <p style="font-size: 0.95em; background: white; padding: 12px; border-radius: 12px;">
-                    Your mashup has been sent to the provided email address.
-                </p>
+                <p style="margin: 15px 0;">${data.message}</p>
                 <div class="button-group">
                     <button onclick="location.reload()" class="primary-btn">Create New Mashup</button>
                 </div>
@@ -529,7 +483,6 @@
             result.className = 'result error';
             result.style.display = 'block';
             result.innerHTML = `
-                <strong style="font-size: 1.2em;">✗ Error</strong>
                 <p style="margin: 15px 0;">${message}</p>
                 <div class="button-group">
                     <button onclick="location.reload()" class="primary-btn">Try Again</button>

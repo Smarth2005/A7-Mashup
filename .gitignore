@@ -7,12 +7,10 @@ env/
 
 # Project folders - NEVER commit these!
 temp_downloads/
-results/
 downloads/
 uploads/
 
 # Audio/Video files - NEVER commit!
-*.mp3
 *.mp4
 *.webm
 *.wav
