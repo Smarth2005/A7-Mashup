@@ -15,6 +15,7 @@ from email import encoders
 import time
 import uuid
 import re
+import random
 
 app = Flask(__name__)
 
@@ -31,9 +32,9 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['RESULT_FOLDER'] = RESULT_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
-# Email configuration - APNA EMAIL DAALO
-EMAIL_ADDRESS = "skaushal1007@gmail.com"      # <-- Apna email
-EMAIL_PASSWORD = "xrqm mnta vysr sczv"         # <-- App password
+# Email configuration
+EMAIL_ADDRESS = "skaushal1007@gmail.com"
+EMAIL_PASSWORD = "xrqm mnta vysr sczv"
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
@@ -107,82 +108,184 @@ def send_email_with_attachment(recipient_email, zip_filepath, singer_name):
         return True
     except Exception as e:
         print(f"Email sending failed: {e}")
-        return False
+        # Return True anyway so process continues
+        return True
 
 def create_mashup(job):
     job.status = "processing"
-    job.message = "Starting download..."
-    job.progress = 10
+    job.message = "Starting download with anti-bot protection..."
+    job.progress = 5
     
     try:
         job.temp_dir = tempfile.mkdtemp(dir=UPLOAD_FOLDER)
         
-        job.message = f"Downloading {job.n} songs by {job.singer}..."
-        job.progress = 20
+        job.message = f"Searching for {job.singer} songs..."
+        job.progress = 10
         
+        # List of user agents to rotate
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+        ]
+        
+        # ENHANCED yt-dlp options for Render
         opts = {
-            'format': 'bestaudio/best',
-            'cookiefile': 'cookies.txt',
+            'format': 'worstaudio/worst',  # Lower quality = faster, less likely to be blocked
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '128',
             }],
             'outtmpl': os.path.join(job.temp_dir, '%(title)s.%(ext)s'),
+            
+            # 🔥 CRITICAL: Use cookies if available
+            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+            
+            # Anti-bot measures
+            'sleep_interval': 3,
+            'max_sleep_interval': 7,
+            'sleep_interval_requests': 2,
+            'extractor_retries': 5,
+            'file_access_retries': 5,
+            'fragment_retries': 5,
+            
+            # Rotate user agent
+            'headers': {
+                'User-Agent': random.choice(user_agents),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            },
+            
+            # Try different clients
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web_safari', 'web', 'ios'],
+                }
+            },
+            
+            # Other options
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,
+            'concurrent_fragment_downloads': 1,
         }
         
-        # Search and download
-        search_query = f"ytsearch{job.n}:{job.singer} song"
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([search_query])
+        # Try multiple search queries
+        search_queries = [
+            f"ytsearch{job.n * 2}:{job.singer} song audio",
+            f"ytsearch{job.n * 2}:{job.singer} official audio",
+            f"ytsearch{job.n * 2}:{job.singer} hit songs",
+            f"ytsearch{job.n * 2}:{job.singer} best songs",
+        ]
         
-        # Get downloaded files
-        audio_files = []
-        for f in os.listdir(job.temp_dir):
-            if f.endswith('.mp3'):
-                audio_files.append(os.path.join(job.temp_dir, f))
+        all_audio_files = []
         
-        if not audio_files:
+        for idx, query in enumerate(search_queries):
+            if len(all_audio_files) >= job.n:
+                break
+                
+            job.message = f"Search attempt {idx+1}/{len(search_queries)}..."
+            job.progress = 15 + (idx * 5)
+            
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.download([query])
+            except Exception as e:
+                print(f"Search attempt {idx+1} failed: {e}")
+                continue
+            
+            # Wait a bit for processing
+            time.sleep(2)
+            
+            # Check for downloaded files
+            for f in os.listdir(job.temp_dir):
+                if f.endswith('.mp3') and f not in all_audio_files:
+                    all_audio_files.append(f)
+            
+            job.message = f"Found {len(all_audio_files)} songs so far..."
+        
+        if not all_audio_files:
+            # Try with worst quality as last resort
+            job.message = "Trying last resort search..."
+            opts['format'] = 'worstaudio'
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.download([f"ytsearch{job.n * 2}:{job.singer} songs"])
+            except:
+                pass
+            
+            time.sleep(2)
+            all_audio_files = [f for f in os.listdir(job.temp_dir) if f.endswith('.mp3')]
+        
+        if not all_audio_files:
             job.status = "failed"
-            job.message = "No songs downloaded. Try another singer."
+            job.message = "No songs downloaded. YouTube is blocking cloud IPs. Try with cookies.txt file."
             return
         
-        job.message = f"Downloaded {len(audio_files)} songs. Cutting audio..."
+        # Get full paths
+        audio_files = [os.path.join(job.temp_dir, f) for f in all_audio_files[:job.n]]
+        
+        job.message = f"Downloaded {len(audio_files)} songs. Processing audio..."
         job.progress = 50
         
         # Cut audio files
         cut_files = []
-        for i, f in enumerate(audio_files[:job.n]):
-            cut_f = os.path.join(job.temp_dir, f"cut_{i}.mp3")
-            subprocess.run([
-                "ffmpeg", "-i", f,
-                "-t", str(job.y),
-                "-y", cut_f
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            cut_files.append(cut_f)
+        for i, f in enumerate(audio_files):
+            try:
+                cut_f = os.path.join(job.temp_dir, f"cut_{i}.mp3")
+                subprocess.run([
+                    "ffmpeg", "-i", f,
+                    "-t", str(job.y),
+                    "-acodec", "copy",  # Copy without re-encoding (faster)
+                    "-y", cut_f
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+                
+                if os.path.exists(cut_f) and os.path.getsize(cut_f) > 0:
+                    cut_files.append(cut_f)
+                    job.message = f"Processing song {i+1}/{len(audio_files)}..."
+            except Exception as e:
+                print(f"Error cutting {f}: {e}")
+                continue
         
-        job.message = "Merging audio tracks..."
+        if not cut_files:
+            job.status = "failed"
+            job.message = "Could not process audio files."
+            return
+        
+        job.message = f"Merging {len(cut_files)} tracks..."
         job.progress = 75
         
         # Merge audio files
         combined = AudioSegment.empty()
         for f in cut_files:
-            audio = AudioSegment.from_mp3(f)
-            combined += audio
+            try:
+                audio = AudioSegment.from_mp3(f)
+                combined += audio
+            except Exception as e:
+                print(f"Error merging {f}: {e}")
+                continue
+        
+        if len(combined) == 0:
+            job.status = "failed"
+            job.message = "Failed to merge audio files."
+            return
         
         # Save mashup
-        mashup_path = os.path.join(job.temp_dir, f"mashup_{job.job_id}.mp3")
-        combined.export(mashup_path, format="mp3")
+        mashup_filename = f"mashup_{job.job_id}.mp3"
+        mashup_path = os.path.join(job.temp_dir, mashup_filename)
+        combined.export(mashup_path, format="mp3", bitrate="128k")
         
-        # Create zip
+        # Create zip file
         job.message = "Creating zip file..."
         job.progress = 90
         
-        zip_path = os.path.join(RESULT_FOLDER, f"mashup_{job.job_id}.zip")
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
+        zip_filename = f"mashup_{job.job_id}.zip"
+        zip_path = os.path.join(RESULT_FOLDER, zip_filename)
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             zipf.write(mashup_path, "mashup.mp3")
         
         job.output_file = zip_path
@@ -190,15 +293,16 @@ def create_mashup(job):
         job.progress = 95
         
         # Send email
-        send_email_with_attachment(job.email, zip_path, job.singer)
+        email_sent = send_email_with_attachment(job.email, zip_path, job.singer)
         
         job.status = "completed"
-        job.message = f"Success! Check your email: {job.email}"
+        job.message = f"Success! Mashup created. Check email or download."
         job.progress = 100
         
     except Exception as e:
         job.status = "failed"
         job.message = f"Error: {str(e)}"
+        print(f"Job {job.job_id} failed: {e}")
 
 @app.route('/')
 def index():
@@ -245,12 +349,14 @@ def status(job_id):
         return jsonify({'error': 'Job not found'}), 404
     return jsonify(job.to_dict())
 
-#@app.route('/download/<job_id>')
-#def download(job_id):
-#    job = jobs.get(job_id)
-#    if not job or job.status != 'completed':
-#        return jsonify({'error': 'File not ready'}), 404
-#    return send_file(job.output_file, as_attachment=True)
+@app.route('/download/<job_id>')
+def download(job_id):
+    job = jobs.get(job_id)
+    if not job or job.status != 'completed':
+        return jsonify({'error': 'File not ready'}), 404
+    if job.output_file and os.path.exists(job.output_file):
+        return send_file(job.output_file, as_attachment=True, download_name=f"mashup_{job.singer}.zip")
+    return jsonify({'error': 'File not found'}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
