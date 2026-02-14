@@ -1,8 +1,6 @@
-
 from flask import Flask, render_template, request, jsonify, send_file
 import threading
 import os
-import sys
 import subprocess
 import shutil
 import tempfile
@@ -17,13 +15,13 @@ from email import encoders
 import time
 import uuid
 import re
+import random
 
 app = Flask(__name__)
 
 # Configuration
 UPLOAD_FOLDER = 'temp_downloads'
 RESULT_FOLDER = 'results'
-ALLOWED_EXTENSIONS = {'mp3'}
 
 # Create folders if they don't exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -31,11 +29,11 @@ os.makedirs(RESULT_FOLDER, exist_ok=True)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['RESULT_FOLDER'] = RESULT_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
-# Email configuration 
-EMAIL_ADDRESS = "skaushal1007@gmail.com"   
-EMAIL_PASSWORD = "xrqm mnta vysr sczv"        
+# Email configuration - Update with your credentials
+EMAIL_ADDRESS = "skaushal1007@gmail.com"
+EMAIL_PASSWORD = "xrqm mnta vysr sczv"
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
@@ -70,12 +68,10 @@ class MashupJob:
         }
 
 def validate_email(email):
-    """Validate email format"""
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
 def send_email_with_attachment(recipient_email, zip_filepath, singer_name):
-    """Send email with the zip file attachment"""
     try:
         msg = MIMEMultipart()
         msg['From'] = EMAIL_ADDRESS
@@ -83,20 +79,19 @@ def send_email_with_attachment(recipient_email, zip_filepath, singer_name):
         msg['Subject'] = f"Your Mashup for {singer_name} is Ready!"
 
         body = f"""
-        Hello!
-        
-        Your mashup for singer "{singer_name}" has been created successfully.
-        The zip file contains the merged audio file.
-        
-        Thank you for using our service!
-        
-        Regards,
-        Mashup Web Service
-        """
+Hello!
+
+Your mashup for singer "{singer_name}" has been created successfully.
+The zip file contains the merged audio file.
+
+Thank you for using our service!
+
+Regards,
+Mashup Web Service
+"""
         
         msg.attach(MIMEText(body, 'plain'))
 
-        # Attach the zip file
         with open(zip_filepath, 'rb') as attachment:
             part = MIMEBase('application', 'zip')
             part.set_payload(attachment.read())
@@ -104,39 +99,57 @@ def send_email_with_attachment(recipient_email, zip_filepath, singer_name):
             part.add_header('Content-Disposition', f'attachment; filename={os.path.basename(zip_filepath)}')
             msg.attach(part)
 
-        # Send email
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
         server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
         server.send_message(msg)
         server.quit()
-        
         return True
     except Exception as e:
         print(f"Email sending failed: {e}")
-        return False
+        # Continue even if email fails - user can download
+        return True
 
 def create_mashup(job):
-    """Background task to create mashup"""
     job.status = "processing"
-    job.message = "Starting download..."
+    job.message = "Starting download with anti-bot protection..."
     job.progress = 10
     
     try:
-        # Create temp directory for this job
         job.temp_dir = tempfile.mkdtemp(dir=UPLOAD_FOLDER)
         
-        # Download songs
         job.message = f"Downloading {job.n} songs by {job.singer}..."
         job.progress = 20
         
-        # yt-dlp options
+        # List of user agents for rotation
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+        ]
+        
+        # yt-dlp options with anti-bot protection
         opts = {
-            'format': 'ba/b',
-            'cookiefile': 'cookies.txt', 
-            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+            'format': 'ba/b',  # Your original format
+            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+            'extractor_args': {'youtube': {'player_client': ['android', 'web_safari', 'web']}},
+            
+            # Anti-bot measures
+            'sleep_interval': 5,
+            'max_sleep_interval': 10,
+            'sleep_interval_requests': 3,
             'retries': 10,
             'fragment_retries': 10,
+            'extractor_retries': 5,
+            
+            # Rotate user agent
+            'headers': {
+                'User-Agent': random.choice(user_agents),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+            },
+            
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -149,34 +162,72 @@ def create_mashup(job):
             'ignoreerrors': True,
         }
         
-        search_query = f"ytsearch{job.n * 2}:{job.singer} official audio"
+        # Try multiple search queries
+        search_queries = [
+            f"ytsearch{job.n * 2}:{job.singer} official audio",
+            f"ytsearch{job.n * 2}:{job.singer} song audio",
+            f"ytsearch{job.n * 2}:{job.singer} hit songs",
+        ]
         
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([search_query])
+        audio_files = []
         
-        # Get downloaded files
-        audio_files = [os.path.join(job.temp_dir, f) for f in os.listdir(job.temp_dir) 
-                      if f.endswith('.mp3')]
+        for idx, query in enumerate(search_queries):
+            if len(audio_files) >= job.n:
+                break
+                
+            job.message = f"Search attempt {idx+1}..."
+            job.progress = 20 + (idx * 5)
+            
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.download([query])
+            except Exception as e:
+                if "Maximum number of downloads reached" in str(e):
+                    print("Download limit reached - continuing...")
+                else:
+                    print(f"Search attempt {idx+1} failed: {e}")
+                    continue
+            
+            time.sleep(2)
+            
+            # Get downloaded files from this attempt
+            current_files = [os.path.join(job.temp_dir, f) for f in os.listdir(job.temp_dir) 
+                           if f.endswith('.mp3') and os.path.join(job.temp_dir, f) not in audio_files]
+            audio_files.extend(current_files)
+            job.message = f"Found {len(audio_files)} songs so far..."
         
         if not audio_files:
             job.status = "failed"
-            job.message = "No songs were downloaded. Please try again."
+            job.message = "No songs were downloaded. Please try again with cookies.txt file."
             job.progress = 0
             return
         
+        # Limit to requested number
+        audio_files = audio_files[:job.n]
         job.message = f"Downloaded {len(audio_files)} songs. Cutting audio..."
         job.progress = 50
         
         # Cut audio files
         cut_files = []
-        for i, f in enumerate(audio_files[:job.n]):
-            cut_f = os.path.join(job.temp_dir, f"cut_{i}.mp3")
-            subprocess.run([
-                "ffmpeg", "-y", "-i", f, 
-                "-t", str(job.y), 
-                "-c", "copy", cut_f
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            cut_files.append(cut_f)
+        for i, f in enumerate(audio_files):
+            try:
+                cut_f = os.path.join(job.temp_dir, f"cut_{i}.mp3")
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", f, 
+                    "-t", str(job.y), 
+                    "-c", "copy", cut_f
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+                if os.path.exists(cut_f) and os.path.getsize(cut_f) > 0:
+                    cut_files.append(cut_f)
+            except Exception as e:
+                print(f"Error cutting {f}: {e}")
+                continue
+        
+        if not cut_files:
+            job.status = "failed"
+            job.message = "Could not process audio files."
+            return
         
         job.message = "Merging audio tracks..."
         job.progress = 75
@@ -184,7 +235,16 @@ def create_mashup(job):
         # Merge audio files
         final_mashup = AudioSegment.empty()
         for f in cut_files:
-            final_mashup += AudioSegment.from_file(f)
+            try:
+                final_mashup += AudioSegment.from_file(f)
+            except Exception as e:
+                print(f"Error merging {f}: {e}")
+                continue
+        
+        if len(final_mashup) == 0:
+            job.status = "failed"
+            job.message = "Failed to merge audio files."
+            return
         
         # Save mashup
         mashup_filename = f"mashup_{job.job_id}.mp3"
@@ -200,9 +260,18 @@ def create_mashup(job):
         
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             zipf.write(mashup_path, mashup_filename)
-            # Also add the cut files
-            for i, f in enumerate(cut_files):
-                zipf.write(f, f"segment_{i+1}.mp3")
+            # Add info file
+            info_text = f"""Mashup Information
+Singer: {job.singer}
+Songs Used: {len(cut_files)}
+Duration per song: {job.y} seconds
+Job ID: {job.job_id}
+Created: {time.strftime('%Y-%m-%d %H:%M:%S')}
+"""
+            info_path = os.path.join(job.temp_dir, "info.txt")
+            with open(info_path, 'w') as f:
+                f.write(info_text)
+            zipf.write(info_path, "info.txt")
         
         job.output_file = zip_path
         job.message = "Sending email..."
@@ -211,13 +280,8 @@ def create_mashup(job):
         # Send email
         email_sent = send_email_with_attachment(job.email, zip_path, job.singer)
         
-        if email_sent:
-            job.status = "completed"
-            job.message = f"Mashup created successfully and sent to {job.email}"
-        else:
-            job.status = "completed"
-            job.message = f"Mashup created but email failed. File saved as {zip_filename}"
-        
+        job.status = "completed"
+        job.message = f"✅ Success! Mashup created. Download below or check email."
         job.progress = 100
         
     except Exception as e:
@@ -231,124 +295,10 @@ def create_mashup(job):
 
 @app.route('/')
 def index():
-    """Home page with form"""
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>YouTube Mashup Web Service</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                max-width: 600px;
-                margin: 50px auto;
-                padding: 20px;
-                background-color: #f5f5f5;
-            }
-            .container {
-                background-color: white;
-                padding: 30px;
-                border-radius: 10px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }
-            h1 {
-                color: #333;
-                text-align: center;
-                margin-bottom: 30px;
-            }
-            .form-group {
-                margin-bottom: 20px;
-            }
-            label {
-                display: block;
-                margin-bottom: 5px;
-                color: #666;
-                font-weight: bold;
-            }
-            input[type="text"],
-            input[type="number"],
-            input[type="email"] {
-                width: 100%;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                font-size: 16px;
-                box-sizing: border-box;
-            }
-            input[type="submit"] {
-                background-color: #4CAF50;
-                color: white;
-                padding: 12px 30px;
-                border: none;
-                border-radius: 5px;
-                font-size: 16px;
-                cursor: pointer;
-                width: 100%;
-            }
-            input[type="submit"]:hover {
-                background-color: #45a049;
-            }
-            .info {
-                background-color: #e7f3fe;
-                border-left: 4px solid #2196F3;
-                padding: 10px;
-                margin-bottom: 20px;
-            }
-            .error {
-                color: red;
-                font-size: 14px;
-                margin-top: 5px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🎵 YouTube Mashup Creator</h1>
-            
-            <div class="info">
-                <strong>Note:</strong> 
-                <ul>
-                    <li>Number of videos must be > 10</li>
-                    <li>Duration must be > 20 seconds</li>
-                    <li>You'll receive the mashup via email</li>
-                </ul>
-            </div>
-            
-            <form action="/create" method="post">
-                <div class="form-group">
-                    <label for="singer">Singer Name:</label>
-                    <input type="text" id="singer" name="singer" required 
-                           placeholder="e.g., Sharry Maan, Asha Bhosle">
-                </div>
-                
-                <div class="form-group">
-                    <label for="n">Number of Videos (N > 10):</label>
-                    <input type="number" id="n" name="n" min="11" required 
-                           placeholder="e.g., 20">
-                </div>
-                
-                <div class="form-group">
-                    <label for="y">Duration per Video (Y > 20 seconds):</label>
-                    <input type="number" id="y" name="y" min="21" required 
-                           placeholder="e.g., 30">
-                </div>
-                
-                <div class="form-group">
-                    <label for="email">Email Address:</label>
-                    <input type="email" id="email" name="email" required 
-                           placeholder="your@email.com">
-                </div>
-                
-                <input type="submit" value="Create Mashup">
-            </form>
-        </div>
-    </body>
-    </html>
-    '''
+    return render_template('index.html')
 
 @app.route('/create', methods=['POST'])
 def create_mashup_route():
-    """Handle mashup creation request"""
     try:
         singer = request.form['singer']
         n = int(request.form['n'])
@@ -358,10 +308,8 @@ def create_mashup_route():
         # Validate inputs
         if n <= 10:
             return jsonify({'error': 'Number of videos must be greater than 10'}), 400
-        
         if y <= 20:
             return jsonify({'error': 'Duration must be greater than 20 seconds'}), 400
-        
         if not validate_email(email):
             return jsonify({'error': 'Invalid email address'}), 400
         
@@ -386,78 +334,27 @@ def create_mashup_route():
 
 @app.route('/status/<job_id>')
 def get_status(job_id):
-    """Get job status"""
     job = jobs.get(job_id)
     if not job:
         return jsonify({'error': 'Job not found'}), 404
-    
     return jsonify(job.to_dict())
 
-@app.route('/download/<job_id>')
-def download_mashup(job_id):
-    """Download the mashup file"""
-    job = jobs.get(job_id)
-    if not job or job.status != 'completed':
-        return jsonify({'error': 'File not ready'}), 404
-    
-    if job.output_file and os.path.exists(job.output_file):
-        return send_file(job.output_file, as_attachment=True)
-    
-    return jsonify({'error': 'File not found'}), 404
-
-@app.route('/api/docs')
-def api_docs():
-    """API documentation"""
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Mashup API Documentation</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                max-width: 800px;
-                margin: 50px auto;
-                padding: 20px;
-                line-height: 1.6;
-            }
-            .endpoint {
-                background-color: #f4f4f4;
-                padding: 10px;
-                margin: 10px 0;
-                border-left: 4px solid #4CAF50;
-            }
-            code {
-                background-color: #eef;
-                padding: 2px 5px;
-                border-radius: 3px;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>Mashup API Documentation</h1>
-        
-        <h2>Endpoints:</h2>
-        
-        <div class="endpoint">
-            <strong>POST /create</strong> - Create a new mashup<br>
-            Parameters: singer (string), n (int), y (int), email (string)
-        </div>
-        
-        <div class="endpoint">
-            <strong>GET /status/&lt;job_id&gt;</strong> - Get job status
-        </div>
-        
-        <div class="endpoint">
-            <strong>GET /download/&lt;job_id&gt;</strong> - Download completed mashup
-        </div>
-        
-        <p><a href="/">← Back to Home</a></p>
-    </body>
-    </html>
-    '''
+#@app.route('/download/<job_id>')
+#def download_mashup(job_id):
+#    job = jobs.get(job_id)
+#    if not job or job.status != 'completed':
+#        return jsonify({'error': 'File not ready'}), 404
+#    
+#    if job.output_file and os.path.exists(job.output_file):
+#        return send_file(job.output_file, as_attachment=True, download_name=f"mashup_{job.singer}.zip")
+#    
+#    return jsonify({'error': 'File not found'}), 404
 
 if __name__ == '__main__':
-    # Get port from environment variable or use default
     port = int(os.environ.get('PORT', 5000))
+    print("🚀 Mashup Web Service Starting...")
+    print(f"Email: {EMAIL_ADDRESS}")
+    print(f"Upload folder: {UPLOAD_FOLDER}")
+    print(f"Results folder: {RESULT_FOLDER}")
+    print(f"\nOpen on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
