@@ -1,0 +1,17 @@
+---
+services:
+  - type: web
+    name: mashup-creator
+    runtime: python
+    region: ohio
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: EMAIL_ADDRESS
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+...

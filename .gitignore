@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+env/
+.env
+
+# Project folders
+temp_downloads/
+results/
+downloads/
+uploads/
+
+# Large files
+*.mp4
+*.wav
+*.m4a
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YouTube Mashup Creator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 520px;
+            padding: 45px 40px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #0f172a;
+            font-size: 2.4em;
+            margin-bottom: 8px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        
+        h1 span {
+            background: linear-gradient(145deg, #2563eb, #7c3aed);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #475569;
+            margin-bottom: 35px;
+            font-size: 0.95em;
+            font-weight: 400;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 24px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #1e293b;
+            font-weight: 600;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid #e2e8f0;
+            border-radius: 16px;
+            font-size: 1em;
+            transition: all 0.2s;
+            background: white;
+            color: #0f172a;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+        }
+        
+        input::placeholder {
+            color: #94a3b8;
+            font-size: 0.95em;
+        }
+        
+        button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(145deg, #2563eb, #7c3aed);
+            color: white;
+            border: none;
+            border-radius: 60px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 16px;
+            letter-spacing: 0.5px;
+            box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.3);
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 30px -5px rgba(37, 99, 235, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: linear-gradient(145deg, #94a3b8, #64748b);
+        }
+        
+        .info-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 30px;
+            font-size: 0.95em;
+        }
+        
+        .info-box strong {
+            color: #0f172a;
+            display: block;
+            margin-bottom: 12px;
+            font-size: 1em;
+        }
+        
+        .info-box ul {
+            margin-left: 20px;
+            color: #334155;
+        }
+        
+        .info-box li {
+            margin: 8px 0;
+        }
+        
+        .info-box li::marker {
+            color: #2563eb;
+        }
+        
+        .result {
+            margin-top: 30px;
+            padding: 24px;
+            border-radius: 20px;
+            display: none;
+            text-align: center;
+        }
+        
+        .result.success {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            color: #166534;
+        }
+        
+        .result.error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+        
+        .progress-section {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: #e2e8f0;
+            border-radius: 60px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #2563eb, #7c3aed);
+            transition: width 0.3s ease;
+            width: 0%;
+            border-radius: 60px;
+        }
+        
+        .job-info {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .job-id {
+            font-family: 'Monaco', 'Menlo', monospace;
+            background: #e2e8f0;
+            padding: 6px 12px;
+            border-radius: 30px;
+            font-size: 0.9em;
+            color: #0f172a;
+            display: inline-block;
+            margin: 10px 0;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 60px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-pending { 
+            background: #fff7ed; 
+            color: #9a3412; 
+            border: 1px solid #fed7aa;
+        }
+        .status-processing { 
+            background: #eff6ff; 
+            color: #1e40af; 
+            border: 1px solid #bfdbfe;
+        }
+        .status-completed { 
+            background: #f0fdf4; 
+            color: #166534; 
+            border: 1px solid #bbf7d0;
+        }
+        .status-failed { 
+            background: #fef2f2; 
+            color: #991b1b; 
+            border: 1px solid #fecaca;
+        }
+        
+        .progress-text {
+            color: #475569;
+            font-size: 0.95em;
+            margin: 10px 0;
+        }
+        
+        .message-box {
+            background: white;
+            border-radius: 16px;
+            padding: 16px;
+            margin: 15px 0;
+            border: 1px solid #e2e8f0;
+            color: #1e293b;
+            font-size: 0.95em;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .primary-btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 60px;
+            font-weight: 600;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .primary-btn:hover {
+            background: #1d4ed8;
+            transform: translateY(-2px);
+        }
+        
+        .secondary-btn {
+            background: #f1f5f9;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+            padding: 12px 28px;
+            border-radius: 60px;
+            font-weight: 600;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .secondary-btn:hover {
+            background: #e2e8f0;
+        }
+        
+        .download-btn {
+            background: #059669;
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 60px;
+            font-weight: 600;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            box-shadow: 0 10px 15px -3px rgba(5, 150, 105, 0.2);
+        }
+        
+        .download-btn:hover {
+            background: #047857;
+            transform: translateY(-2px);
+        }
+        
+        .footer-note {
+            text-align: center;
+            margin-top: 25px;
+            color: #64748b;
+            font-size: 0.85em;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            background: #f1f5f9;
+            padding: 12px 16px;
+            border-radius: 16px;
+            margin: 15px 0;
+            font-size: 0.9em;
+            color: #334155;
+        }
+        
+        .highlight {
+            color: #2563eb;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><span>🎵 Mashup</span> Creator</h1>
+        <div class="subtitle">Create custom audio mashups from YouTube</div>
+        
+        <div class="info-box">
+            <strong>Guidelines</strong>
+            <ul>
+                <li>Number of videos must be greater than 10</li>
+                <li>Duration must be greater than 20 seconds</li>
+                <li>Provide a valid email address to receive the mashup</li>
+                <li>Processing time: 1-3 minutes depending on inputs</li>
+            </ul>
+        </div>
+        
+        <form id="mashupForm">
+            <div class="form-group">
+                <label>Singer Name</label>
+                <input type="text" name="singer" placeholder="e.g., Asha Bhosle, Sharry Maan" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Number of Videos (N > 10)</label>
+                <input type="number" name="n" min="11" placeholder="e.g., 15" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Duration per Video (Y > 20 seconds)</label>
+                <input type="number" name="y" min="21" placeholder="e.g., 30" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" name="email" placeholder="your@email.com" required>
+            </div>
+            
+            <button type="submit" id="submitBtn">Create Mashup</button>
+        </form>
+        
+        <div class="progress-section" id="progressSection">
+            <div class="job-info" id="jobInfo"></div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Initializing...</div>
+            <div class="message-box" id="messageBox"></div>
+        </div>
+        
+        <div id="result" class="result"></div>
+        
+        <div class="footer-note">
+            Mashup Assignment • Predictive Analytics Using Stats
+        </div>
+    </div>
+    
+    <script>
+        let currentJobId = null;
+        
+        document.getElementById('mashupForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const submitBtn = document.getElementById('submitBtn');
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing Request...';
+            
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('result').className = 'result';
+            
+            try {
+                const response = await fetch('/create', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    showError(data.error);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Create Mashup';
+                } else {
+                    currentJobId = data.job_id;
+                    
+                    // Show Job ID but as reference only
+                    document.getElementById('progressSection').style.display = 'block';
+                    document.getElementById('jobInfo').innerHTML = `
+                        <div style="margin-bottom: 10px; color: #475569;">Request Submitted</div>
+                        <div class="job-id">Reference: ${data.job_id}</div>
+                        <div class="stats">
+                            <span>Status: <span class="status-badge status-pending">Pending</span></span>
+                            <span>Progress: <span class="highlight">0%</span></span>
+                        </div>
+                    `;
+                    
+                    document.getElementById('progressFill').style.width = '0%';
+                    document.getElementById('progressText').textContent = 'Starting mashup creation...';
+                    document.getElementById('messageBox').textContent = 'Downloading songs from YouTube...';
+                    
+                    checkStatus(data.job_id);
+                }
+            } catch (error) {
+                showError('Network error. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Mashup';
+            }
+        });
+        
+        function checkStatus(jobId) {
+            fetch(`/status/${jobId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Update progress
+                    document.getElementById('progressFill').style.width = data.progress + '%';
+                    
+                    // Status badge
+                    let statusClass = 'status-' + data.status;
+                    let statusText = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+                    
+                    document.getElementById('jobInfo').innerHTML = `
+                        <div style="margin-bottom: 10px; color: #475569;">Request Submitted</div>
+                        <div class="job-id">Reference: ${data.job_id}</div>
+                        <div class="stats">
+                            <span>Status: <span class="status-badge ${statusClass}">${statusText}</span></span>
+                            <span>Progress: <span class="highlight">${data.progress}%</span></span>
+                        </div>
+                    `;
+                    
+                    document.getElementById('progressText').textContent = 
+                        `Progress: ${data.progress}% complete`;
+                    document.getElementById('messageBox').textContent = data.message;
+                    
+                    if (data.status === 'completed') {
+                        showSuccess(data);
+                    } else if (data.status === 'failed') {
+                        showError(data.message);
+                        document.getElementById('progressSection').style.display = 'none';
+                        document.getElementById('submitBtn').disabled = false;
+                        document.getElementById('submitBtn').textContent = 'Create Mashup';
+                    } else {
+                        // Check again after 2.5 seconds
+                        setTimeout(() => checkStatus(jobId), 2500);
+                    }
+                })
+                .catch(error => {
+                    console.error('Status check failed:', error);
+                    setTimeout(() => checkStatus(jobId), 5000);
+                });
+        }
+        
+        function showSuccess(data) {
+            document.getElementById('progressFill').style.width = '100%';
+            document.getElementById('progressText').textContent = 'Complete!';
+            
+            const result = document.getElementById('result');
+            result.className = 'result success';
+            result.style.display = 'block';
+            
+            // Show success message WITHOUT download button
+            result.innerHTML = `
+                <strong style="font-size: 1.2em;">✓ Completed Successfully</strong>
+                <p style="margin: 15px 0; color: #065f46;">${data.message}</p>
+                <p style="font-size: 0.95em; background: white; padding: 12px; border-radius: 12px;">
+                    Your mashup has been sent to the provided email address.
+                </p>
+                <div class="button-group">
+                    <button onclick="location.reload()" class="primary-btn">Create New Mashup</button>
+                </div>
+            `;
+            
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').textContent = 'Create Mashup';
+        }
+        
+        function showError(message) {
+            const result = document.getElementById('result');
+            result.className = 'result error';
+            result.style.display = 'block';
+            result.innerHTML = `
+                <strong style="font-size: 1.2em;">✗ Error</strong>
+                <p style="margin: 15px 0;">${message}</p>
+                <div class="button-group">
+                    <button onclick="location.reload()" class="primary-btn">Try Again</button>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
