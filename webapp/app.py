@@ -130,11 +130,12 @@ def create_mashup(job):
         ]
         
         # yt-dlp options with anti-bot protection
+        cookies_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookies.txt')
         opts = {
-            'format': 'ba/b',  # Your original format
-            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+            'format': 'ba/b',
+            'cookiefile': cookies_path if os.path.exists(cookies_path) else None,
             'extractor_args': {'youtube': {'player_client': ['android', 'web_safari', 'web']}},
-            
+    
             # Anti-bot measures
             'sleep_interval': 5,
             'max_sleep_interval': 10,
@@ -142,14 +143,14 @@ def create_mashup(job):
             'retries': 10,
             'fragment_retries': 10,
             'extractor_retries': 5,
-            
+    
             # Rotate user agent
             'headers': {
                 'User-Agent': random.choice(user_agents),
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.5',
             },
-            
+    
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
