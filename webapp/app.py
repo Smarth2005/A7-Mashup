@@ -5,17 +5,20 @@ import subprocess
 import shutil
 import tempfile
 import zipfile
+import base64
 import yt_dlp
 from pydub import AudioSegment
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email.mime.text import MIMEText
-from email import encoders
 import time
 import uuid
 import re
 import random
+
+# Resend is optional — app works without it (download-only mode)
+try:
+    import resend
+    RESEND_AVAILABLE = True
+except ImportError:
+    RESEND_AVAILABLE = False
 
 app = Flask(__name__)
 
@@ -31,11 +34,18 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['RESULT_FOLDER'] = RESULT_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
-# Email configuration - Update with your credentials
-EMAIL_ADDRESS = "skaushal1007@gmail.com"
-EMAIL_PASSWORD = "xrqm mnta vysr sczv"
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
+# Email configuration — loaded from environment variables (never hardcoded)
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "")
+
+# Initialize Resend if API key is available
+if RESEND_AVAILABLE and RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
+    EMAIL_ENABLED = True
+    print("✅ Email delivery enabled (Resend API)")
+else:
+    EMAIL_ENABLED = False
+    print("⚠️  Email delivery disabled — RESEND_API_KEY not set. Download-only mode.")
 
 # Store job status
 jobs = {}
@@ -53,6 +63,7 @@ class MashupJob:
         self.output_file = None
         self.temp_dir = None
         self.start_time = time.time()
+        self.email_sent = False
 
     def to_dict(self):
         return {
@@ -64,7 +75,9 @@ class MashupJob:
             'status': self.status,
             'progress': self.progress,
             'message': self.message,
-            'elapsed_time': int(time.time() - self.start_time)
+            'elapsed_time': int(time.time() - self.start_time),
+            'email_sent': self.email_sent,
+            'email_enabled': EMAIL_ENABLED
         }
 
 def validate_email(email):
@@ -72,43 +85,47 @@ def validate_email(email):
     return re.match(pattern, email) is not None
 
 def send_email_with_attachment(recipient_email, zip_filepath, singer_name):
+    """Send email with attachment using Resend REST API (works on Render free tier)."""
+    if not EMAIL_ENABLED:
+        print("Email delivery skipped — not configured.")
+        return False
+
     try:
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_ADDRESS
-        msg['To'] = recipient_email
-        msg['Subject'] = f"Your Mashup for {singer_name} is Ready!"
+        # Read the zip file and encode as base64
+        with open(zip_filepath, "rb") as f:
+            file_content = base64.b64encode(f.read()).decode("utf-8")
 
-        body = f"""
-Hello!
+        params = {
+            "from": f"Mashup Creator <{EMAIL_FROM}>",
+            "to": [recipient_email],
+            "subject": f"Your Mashup for {singer_name} is Ready!",
+            "html": f"""
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px;">
+                    <h2 style="color: #1e293b;">🎵 Your Mashup is Ready!</h2>
+                    <p style="color: #334155; font-size: 16px;">
+                        Your mashup for singer "<strong>{singer_name}</strong>" has been created successfully.
+                    </p>
+                    <p style="color: #334155;">The attached zip file contains the merged audio file.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+                    <p style="color: #64748b; font-size: 14px;">
+                        Thank you for using Mashup Creator!
+                    </p>
+                </div>
+            """,
+            "attachments": [
+                {
+                    "content": file_content,
+                    "filename": os.path.basename(zip_filepath),
+                }
+            ],
+        }
 
-Your mashup for singer "{singer_name}" has been created successfully.
-The zip file contains the merged audio file.
-
-Thank you for using our service!
-
-Regards,
-Mashup Web Service
-"""
-        
-        msg.attach(MIMEText(body, 'plain'))
-
-        with open(zip_filepath, 'rb') as attachment:
-            part = MIMEBase('application', 'zip')
-            part.set_payload(attachment.read())
-            encoders.encode_base64(part)
-            part.add_header('Content-Disposition', f'attachment; filename={os.path.basename(zip_filepath)}')
-            msg.attach(part)
-
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-        server.send_message(msg)
-        server.quit()
+        email_response = resend.Emails.send(params)
+        print(f"Email sent successfully: {email_response}")
         return True
     except Exception as e:
         print(f"Email sending failed: {e}")
-        # Continue even if email fails - user can download
-        return True
+        return False
 
 def create_mashup(job):
     job.status = "processing"
@@ -274,14 +291,18 @@ Created: {time.strftime('%Y-%m-%d %H:%M:%S')}
             zipf.write(info_path, "info.txt")
         
         job.output_file = zip_path
-        job.message = "Sending email..."
-        job.progress = 95
         
-        # Send email
-        email_sent = send_email_with_attachment(job.email, zip_path, job.singer)
+        # Attempt email delivery (non-blocking — download is always available)
+        if EMAIL_ENABLED:
+            job.message = "Sending email..."
+            job.progress = 95
+            job.email_sent = send_email_with_attachment(job.email, zip_path, job.singer)
         
         job.status = "completed"
-        job.message = f"✅ Success! Mashup created. Download below or check email."
+        if job.email_sent:
+            job.message = "✅ Success! Mashup created and emailed. You can also download below."
+        else:
+            job.message = "✅ Success! Mashup created. Download your file below."
         job.progress = 100
         
     except Exception as e:
@@ -339,22 +360,27 @@ def get_status(job_id):
         return jsonify({'error': 'Job not found'}), 404
     return jsonify(job.to_dict())
 
-#@app.route('/download/<job_id>')
-#def download_mashup(job_id):
-#    job = jobs.get(job_id)
-#    if not job or job.status != 'completed':
-#        return jsonify({'error': 'File not ready'}), 404
-#    
-#    if job.output_file and os.path.exists(job.output_file):
-#        return send_file(job.output_file, as_attachment=True, download_name=f"mashup_{job.singer}.zip")
-#    
-#    return jsonify({'error': 'File not found'}), 404
+@app.route('/download/<job_id>')
+def download_mashup(job_id):
+    """Download the completed mashup zip file directly."""
+    job = jobs.get(job_id)
+    if not job or job.status != 'completed':
+        return jsonify({'error': 'File not ready'}), 404
+    
+    if job.output_file and os.path.exists(job.output_file):
+        return send_file(
+            job.output_file, 
+            as_attachment=True, 
+            download_name=f"mashup_{job.singer.replace(' ', '_')}.zip"
+        )
+    
+    return jsonify({'error': 'File not found'}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("🚀 Mashup Web Service Starting...")
-    print(f"Email: {EMAIL_ADDRESS}")
-    print(f"Upload folder: {UPLOAD_FOLDER}")
-    print(f"Results folder: {RESULT_FOLDER}")
-    print(f"\nOpen on port {port}")
+    print(f"   Email: {'Enabled' if EMAIL_ENABLED else 'Disabled (set RESEND_API_KEY to enable)'}")
+    print(f"   Upload folder: {UPLOAD_FOLDER}")
+    print(f"   Results folder: {RESULT_FOLDER}")
+    print(f"\n   Open on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)

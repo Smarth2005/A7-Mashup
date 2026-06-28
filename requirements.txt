@@ -2,3 +2,4 @@ Flask==2.3.3
 yt-dlp
 pydub
 gunicorn
+resend
