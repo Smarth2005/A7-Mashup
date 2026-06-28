@@ -1,0 +1,18 @@
+.git
+.gitignore
+.env
+__pycache__
+*.pyc
+temp_downloads/
+results/
+output_mashup/
+*.mp3
+*.mp4
+*.webm
+*.wav
+*.m4a
+.vscode/
+.idea/
+README.md
+assets/
+Assignment - Mashup.pdf
