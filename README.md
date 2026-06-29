@@ -92,7 +92,7 @@ Visit `http://127.0.0.1:5000` in your browser.
 
 ## Cloud Deployment Limitation
 
-> **⚠️ YouTube blocks cloud server IPs.** Platforms like Render, Heroku, and AWS block or get blocked by YouTube's anti-bot systems — outbound SMTP ports (587/465) are blocked by the platform, and YouTube rejects download requests from known datacenter IP ranges. This means the full mashup pipeline (download → process → deliver) **only works when run locally**. The Flask UI deploys fine, but `yt-dlp` downloads will fail on cloud servers.
+**⚠️ YouTube blocks cloud server IPs.** Platforms like Render, Heroku, and AWS block or get blocked by YouTube's anti-bot systems — outbound SMTP ports (587/465) are blocked by the platform, and YouTube rejects download requests from known datacenter IP ranges. This means the full mashup pipeline (download → process → deliver) **only works when run locally**. The Flask UI deploys fine, but `yt-dlp` downloads will fail on cloud servers.
 
 ---
 
