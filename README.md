@@ -90,20 +90,9 @@ Visit `http://127.0.0.1:5000` in your browser.
 
 ---
 
-## Deployment on Render
+## Cloud Deployment Limitation
 
-This project is configured to deploy on Render's free tier using `render.yaml`.
-
-### Steps:
-1. Push your code to GitHub
-2. Connect the repo to [Render](https://render.com)
-3. In Render Dashboard → **Environment**, set:
-   - `RESEND_API_KEY` — your Resend API key (optional, for email)
-   - `EMAIL_FROM` — your verified sender address (optional, for email)
-4. The app will work in **download-only mode** without these env vars
-
-### Why not SMTP?
-Render (and most cloud platforms) block outbound SMTP traffic (ports 587/465) on free tiers to prevent spam. Resend uses HTTPS (port 443) which is always allowed.
+> **⚠️ YouTube blocks cloud server IPs.** Platforms like Render, Heroku, and AWS block or get blocked by YouTube's anti-bot systems — outbound SMTP ports (587/465) are blocked by the platform, and YouTube rejects download requests from known datacenter IP ranges. This means the full mashup pipeline (download → process → deliver) **only works when run locally**. The Flask UI deploys fine, but `yt-dlp` downloads will fail on cloud servers.
 
 ---
 
@@ -123,8 +112,4 @@ Render (and most cloud platforms) block outbound SMTP traffic (ports 587/465) on
 - **Live Progress Tracking:** Utilized JavaScript Polling (`setInterval`) to fetch real-time job status from a dedicated server-side endpoint every 2 seconds.
 - **Resource Management:** Automated cleanup using the `shutil` and `tempfile` modules to ensure all temporary audio fragments are deleted immediately after the ZIP file is generated.
 - **Anti-Bot Formatting:** Forced `ba/b` (Best Audio) format selection to reduce the footprint of requests and minimize the risk of being flagged by YouTube's automated systems.
-- **Cloud-Ready Email:** Uses Resend REST API instead of SMTP, enabling deployment on platforms that block outbound SMTP ports.
 - **Graceful Fallback:** Download button always available regardless of email configuration status.
-
-</div>
-
